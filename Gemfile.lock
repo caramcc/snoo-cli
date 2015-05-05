@@ -1,0 +1,29 @@
+GEM
+  specs:
+    addressable (2.3.7)
+    commander (4.1.5)
+      highline (~> 1.6.11)
+    faraday (0.9.1)
+      multipart-post (>= 1.2, < 3)
+    fastimage (1.6.8)
+      addressable (~> 2.3, >= 2.3.5)
+    hashie (3.4.0)
+    highline (1.6.21)
+    justify (1.0.2)
+    multi_json (1.10.1)
+    multipart-post (2.0.0)
+    paint (1.0.0)
+    redd (0.7.7)
+      faraday (~> 0.9.1)
+      fastimage (~> 1.6.6)
+      hashie (~> 3.4.0)
+      multi_json (~> 1.10.1)
+
+PLATFORMS
+  ruby
+
+DEPENDENCIES
+  commander
+  justify
+  paint
+  redd (~> 0.7.0)
