@@ -5,8 +5,10 @@ require 'commander/import'
 require 'redd'
 require 'paint'
 require 'justify'
+require 'json'
 
 require_relative '../config.rb'
+# require_relative 'config.rb'
 
 program :version, '0.0.1'
 program :description, 'Browse reddit from your command line'
@@ -45,7 +47,9 @@ command :r do |c|
       id += 1
     end
 
-    puts 'not yet implemented'
+    m = JSON.dump top.to_a
+    File.open($cache, 'w') {|f| f.write(m) }
+
   end
 end
 
@@ -89,7 +93,13 @@ command :comments do |c|
   c.example 'description', 'command example'
   c.option '--some-switch', 'Some switch that does something'
   c.action do |args, options|
-    puts 'not yet implemented'
+    if args[0].nil?
+      post_id = ask('Which number?')
+    else
+      post_id = args[0]
+    end
+    posts = JSON.parse(File.read($cache))
+    puts posts
   end
 end
 
