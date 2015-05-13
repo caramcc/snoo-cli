@@ -47,6 +47,7 @@ command :r do |c|
     end
 
     r = Marshal.load(File.read($session))
+    r.authorize!
 
     sr = r.subreddit_from_name(subreddit)
     top = sr.get_top.to_a
@@ -94,7 +95,26 @@ command :up do |c|
   c.example 'description', 'command example'
   c.option '--some-switch', 'Some switch that does something'
   c.action do |args, options|
-    puts 'not yet implemented'
+    if args[0].nil?
+      id = ask('Which thread?')
+    else
+      id = args[0]
+    end
+
+    r = Marshal.load(File.read($session))
+    r.authorize!
+    # to_execute = File.read($cache)
+    all_posts = r.subreddit_from_name('talesfromtechsupport').get_top.to_a
+
+
+    post = all_posts[id.to_i]
+
+    if post.nil?
+      puts 'invalid id'
+    else
+      post.upvote
+      puts "Upvoted! [#{Paint["snoo unvote #{id}", $orangered ]} to clear vote]"
+    end
   end
 end
 
@@ -105,7 +125,55 @@ command :down do |c|
   c.example 'description', 'command example'
   c.option '--some-switch', 'Some switch that does something'
   c.action do |args, options|
-    puts 'not yet implemented'
+    if args[0].nil?
+      id = ask('Which thread?')
+    else
+      id = args[0]
+    end
+
+    r = Marshal.load(File.read($session))
+    r.authorize!
+    # to_execute = File.read($cache)
+    all_posts = r.subreddit_from_name('talesfromtechsupport').get_top.to_a
+
+
+    post = all_posts[id.to_i]
+
+    if post.nil?
+      puts 'invalid id'
+    else
+      post.downvote
+      puts "Downvoted. [#{Paint["snoo unvote #{id}", $orangered ]} to clear vote]"
+    end
+  end
+end
+command :unvote do |c|
+  c.syntax = 'snoo down [options]'
+  c.summary = ''
+  c.description = ''
+  c.example 'description', 'command example'
+  c.option '--some-switch', 'Some switch that does something'
+  c.action do |args, options|
+    if args[0].nil?
+      id = ask('Which thread?')
+    else
+      id = args[0]
+    end
+
+    r = Marshal.load(File.read($session))
+    r.authorize!
+    # to_execute = File.read($cache)
+    all_posts = r.subreddit_from_name('talesfromtechsupport').get_top.to_a
+
+
+    post = all_posts[id.to_i]
+
+    if post.nil?
+      puts 'invalid id'
+    else
+      post.clear_vote
+      puts 'Cleared vote!'
+    end
   end
 end
 
@@ -123,6 +191,7 @@ command :comments do |c|
     end
 
     r = Marshal.load(File.read($session))
+    r.authorize!
     # to_execute = File.read($cache)
     all_posts = r.subreddit_from_name('talesfromtechsupport').get_top.to_a
 
