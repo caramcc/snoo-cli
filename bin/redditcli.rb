@@ -38,7 +38,7 @@ command :r do |c|
   c.summary = ''
   c.description = ''
   c.example 'description', 'command example'
-  c.option '--some-switch', 'Some switch that does something'
+  c.option '--sortby', 'Some switch that does something'
   c.action do |args, options|
     if args[0].nil?
       subreddit = ask('Subreddit: /r/')
@@ -46,12 +46,28 @@ command :r do |c|
       subreddit = args[0]
     end
 
+    if $valid_sorts.include? args[1]
+      sort = args[1]
+    else
+      sort = 'hot'
+    end
+
     r = Marshal.load(File.read($session))
     r.authorize!
 
-    sr = r.subreddit_from_name(subreddit)
-    top = sr.get_top.to_a
-    to_cache = "subreddit_from_name('#{subreddit}').get_top.to_a"
+    if sort == 'top'
+      top = r.subreddit_from_name(subreddit).get_top.to_a
+    elsif sort == 'hot'
+      top = r.subreddit_from_name(subreddit).get_hot.to_a
+    elsif sort == 'new'
+      top = r.subreddit_from_name(subreddit).get_new.to_a
+    else #controvertial
+      top = r.subreddit_from_name(subreddit).get_controvertial.to_a
+    end
+    to_cache = {
+        :subreddit => subreddit,
+        :sortby => sort
+    }
     top.select! {|post| post.is_self}
     unless $nsfw_ok
       top.select! {|post| !post.over_18}
@@ -72,7 +88,7 @@ command :r do |c|
       puts "\n--------\n"
       id += 1
     end
-    File.open($cache, 'w') { |file| file.write(to_cache) }
+    File.open($cache, 'w') { |file| file.write(to_cache.to_json) }
 
   end
 end
@@ -96,24 +112,46 @@ command :up do |c|
   c.option '--some-switch', 'Some switch that does something'
   c.action do |args, options|
     if args[0].nil?
-      id = ask('Which thread?')
+      id = ask('Which thread or comment?')
     else
       id = args[0]
     end
 
+    id.length == 7 ? type = :comment : type = :thread
+
     r = Marshal.load(File.read($session))
-    r.authorize!
-    # to_execute = File.read($cache)
-    all_posts = r.subreddit_from_name('talesfromtechsupport').get_top.to_a
+    begin
+      r.authorize!
 
+      if type == :thread
+        cached = JSON.read($cache)
+        last_sr = cached['subreddit']
+        sort = cached['sortby']
 
-    post = all_posts[id.to_i]
+        if sort == 'top'
+          all_posts = r.subreddit_from_name(last_sr).get_top.to_a
+        elsif sort == 'hot'
+          all_posts = r.subreddit_from_name(last_sr).get_hot.to_a
+        elsif sort == 'new'
+          all_posts = r.subreddit_from_name(last_sr).get_new.to_a
+        else #controvertial
+          all_posts = r.subreddit_from_name(last_sr).get_controvertial.to_a
+        end
 
-    if post.nil?
-      puts 'invalid id'
-    else
-      post.upvote
-      puts "Upvoted! [#{Paint["snoo unvote #{id}", $orangered ]} to clear vote]"
+        post = all_posts[id.to_i]
+
+        if post.nil?
+          puts 'invalid id'
+        else
+          post.upvote
+          puts "Upvoted! [#{Paint["snoo unvote #{id}", $orangered ]} to clear vote]"
+        end
+      else
+
+      end
+    rescue Redd::Error::ExpiredCode => e
+      puts "Your password is incorrect. #{Paint['snoo login', $periwinkle ]} to login, then vote again."
+
     end
   end
 end
@@ -132,19 +170,25 @@ command :down do |c|
     end
 
     r = Marshal.load(File.read($session))
-    r.authorize!
-    # to_execute = File.read($cache)
-    all_posts = r.subreddit_from_name('talesfromtechsupport').get_top.to_a
+    begin
+      r.authorize!
 
+      all_posts = r.subreddit_from_name('talesfromtechsupport').get_top.to_a
 
-    post = all_posts[id.to_i]
+      post = all_posts[id.to_i]
 
-    if post.nil?
-      puts 'invalid id'
-    else
-      post.downvote
-      puts "Downvoted. [#{Paint["snoo unvote #{id}", $orangered ]} to clear vote]"
+      if post.nil?
+        puts 'invalid id'
+      else
+        post.downvote
+        puts "Downvoted. [#{Paint["snoo unvote #{id}", $orangered ]} to clear vote]"
+      end
+    rescue Redd::Error::ExpiredCode => e
+      puts "Your password is incorrect. #{Paint["snoo login", $periwinkle ]} to login, then vote again."
+      break
     end
+
+
   end
 end
 command :unvote do |c|
@@ -161,18 +205,22 @@ command :unvote do |c|
     end
 
     r = Marshal.load(File.read($session))
-    r.authorize!
-    # to_execute = File.read($cache)
-    all_posts = r.subreddit_from_name('talesfromtechsupport').get_top.to_a
+    begin
+      r.authorize!
+      all_posts = r.subreddit_from_name('talesfromtechsupport').get_top.to_a
 
 
-    post = all_posts[id.to_i]
+      post = all_posts[id.to_i]
 
-    if post.nil?
-      puts 'invalid id'
-    else
-      post.clear_vote
-      puts 'Cleared vote!'
+      if post.nil?
+        puts 'invalid id'
+      else
+        post.clear_vote
+        puts 'Cleared vote!'
+      end
+    rescue Redd::Error::ExpiredCode => e
+      puts "Your password is incorrect. #{Paint["snoo login", $periwinkle ]} to login, then vote again."
+      break
     end
   end
 end
@@ -192,8 +240,20 @@ command :comments do |c|
 
     r = Marshal.load(File.read($session))
     r.authorize!
-    # to_execute = File.read($cache)
-    all_posts = r.subreddit_from_name('talesfromtechsupport').get_top.to_a
+
+    cached = JSON.parse(File.read($cache))
+    last_sr = cached['subreddit']
+    sort = cached['sortby']
+
+    if sort == 'top'
+      all_posts = r.subreddit_from_name(last_sr).get_top.to_a
+    elsif sort == 'hot'
+      all_posts = r.subreddit_from_name(last_sr).get_hot.to_a
+    elsif sort == 'new'
+      all_posts = r.subreddit_from_name(last_sr).get_new.to_a
+    else #controvertial
+      all_posts = r.subreddit_from_name(last_sr).get_controvertial.to_a
+    end
 
 
     post = all_posts[id.to_i]
@@ -229,7 +289,18 @@ command :login do |c|
     u = ask('Username? /u/')
     p = ask('Password:  ') { |q| q.echo = false }
 
-    File.write($session, Marshal.dump(Redd.it(:script, $key, $secret, u, p, :user_agent => 'Reddit Command Line Browser v.0.1')))
+    r = Redd.it(:script, $key, $secret, u, p, :user_agent => 'Reddit Command Line Browser v.0.1')
+
+    File.write($session, Marshal.dump(r))
+
+    begin
+      r.authorize!
+        puts "Logged in as /u/#{u}"
+    rescue Redd::Error::ExpiredCode => e
+      puts 'Something went wrong. Make sure you typed your password in correctly.'
+    end
+
+
   end
 end
 
