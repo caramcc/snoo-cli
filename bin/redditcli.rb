@@ -169,7 +169,7 @@ command :down do |c|
   c.option '--some-switch', 'Some switch that does something'
   c.action do |args, options|
     if args[0].nil?
-      id = ask('Which thread?')
+      id = ask('Which thread or comment?')
     else
       id = args[0]
     end
@@ -212,7 +212,6 @@ command :down do |c|
       end
     rescue Redd::Error::ExpiredCode => e
       puts "Your password is incorrect. #{Paint['snoo login', $periwinkle ]} to login, then vote again."
-      break
     end
 
 
@@ -226,7 +225,7 @@ command :unvote do |c|
   c.option '--some-switch', 'Some switch that does something'
   c.action do |args, options|
     if args[0].nil?
-      id = ask('Which thread?')
+      id = ask('Which thread or comment?')
     else
       id = args[0]
     end
@@ -269,7 +268,6 @@ command :unvote do |c|
       end
     rescue Redd::Error::ExpiredCode
       puts "Your password is incorrect. #{Paint['snoo login', $periwinkle ]} to login, then vote again."
-      break
     end
   end
 end
@@ -324,6 +322,70 @@ command :open do |c|
   c.option '--some-switch', 'Some switch that does something'
   c.action do |args, options|
     puts 'not yet implemented'
+  end
+end
+
+command :comment do |c|
+  c.syntax = 'snoo comment [options]'
+  c.summary = ''
+  c.description = ''
+  c.example 'description', 'command example'
+  c.option '--some-switch', 'Some switch that does something'
+  c.action do |args, options|
+    if args[0].nil?
+      id = ask('Which thread or comment?')
+      comment_text = ask('Comment: ')
+    else
+      id = args[0]
+      if args[1].nil?
+        comment_text = ask('Comment: ')
+      else
+        comment_text = args[1]
+      end
+    end
+
+    id.length == 7 ? type = :comment : type = :thread
+
+
+    r = Marshal.load(File.read($session))
+    begin
+      r.authorize!
+
+      if type == :thread
+        cached = JSON.read($cache)
+        last_sr = cached['subreddit']
+        sort = cached['sortby']
+
+        if sort == 'top'
+          all_posts = r.subreddit_from_name(last_sr).get_top.to_a
+        elsif sort == 'hot'
+          all_posts = r.subreddit_from_name(last_sr).get_hot.to_a
+        elsif sort == 'new'
+          all_posts = r.subreddit_from_name(last_sr).get_new.to_a
+        else #controvertial
+          all_posts = r.subreddit_from_name(last_sr).get_controvertial.to_a
+        end
+
+        post = all_posts[id.to_i]
+
+        if post.nil?
+          puts 'invalid id'
+        else
+          post.reply(comment_text)
+          puts "Replied to #{post.author}'s thread ''#{post.title[0..40]}...' in /r/#{post.subreddit}"
+          puts "Said: #{comment_text.justify(80)}"
+        end
+      else
+        r.authorize!
+        comment = r.from_fullnames("t1_#{id}").first
+        comment.reply(comment_text)
+        puts "Replied to #{comment.author}'s comment '#{comment.body[0..40]}...' in /r/#{comment.subreddit}."
+        puts "Said: #{comment_text.justify(80)}"
+      end
+    rescue Redd::Error::ExpiredCode
+      puts "Your password is incorrect. #{Paint['snoo login', $periwinkle ]} to login, then vote again."
+      break
+    end
   end
 end
 
