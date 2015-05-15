@@ -4,7 +4,7 @@ require 'rubygems'
 require 'commander/import'
 require 'redd'
 require 'paint'
-require 'justify'
+# require 'justify'
 require 'json'
 require 'securerandom'
 
@@ -18,20 +18,76 @@ default_command :login
 
 def display_children(children, op, tabs=0)
   children.each do |child|
-    if child.kind == 'Listing'
-      puts "snoo moar #{child.id}"
+    if child.instance_of? Redd::Objects::MoreComments
+      # puts "snoo moar #{child.id}"
+      puts child
     else
       child.author == op ? author = "/u/#{Paint[child.author, $periwinkle ]}" : author = '/u/' << child.author
-      puts '   ' * (tabs) << "[ #{child.score} points ] [ by /u/#{author} ] [#{Paint["snoo up/down #{child.id}", $orangered ]} to up/down vote]"
+      puts ' ' * (tabs) << "[ #{child.score} points ] [ by /u/#{author} ] [#{Paint["snoo up/down #{child.id}", $orangered ]} to up/down vote]"
       puts "\n"
       child.body.split("\n").each do |line|
-        # line.gsub!('&gt;', '>')
-        puts '   ' * (tabs) << "#{line.justify(80-tabs)}"
+        line.gsub!('&gt;', '>')
+        puts line.justify(80-tabs, tabs)
       end
-      puts '   ' * (tabs) << "--------\n\n"
-      display_children(child.replies, op, tabs+=1)
+      puts ' ' * (tabs) << "--------\n\n"
+      display_children(child.replies, op, tabs+=4)
     end
   end
+end
+
+class String
+  def justify(len = 80, indent_len = 0)
+    unless self.length < len
+
+      words = self.gsub("\n", " ").scan(/[\w.-]+/)
+      actual_len = 0
+      output = " " * indent_len
+      words.each do |w|
+        output += w
+        actual_len += w.length
+        if actual_len >= len
+          output += "\n"
+          output += " " * indent_len
+          actual_len = 0
+        else
+          output += " "
+        end
+      end
+      return output
+    else
+      " " * indent_len << self
+    end
+
+  end
+end
+
+def filter_posts(all_posts)
+  all_posts.select! {|post| post.is_self}
+  unless $nsfw_ok
+    all_posts.select! {|post| !post.over_18}
+  end
+  all_posts
+end
+
+def retrieve_thread_post(id, r)
+  cached = JSON.parse(File.read($cache))
+  last_sr = cached['subreddit']
+  sort = cached['sortby']
+
+  if sort == 'top'
+    all_posts = r.subreddit_from_name(last_sr).get_top.to_a
+  elsif sort == 'hot'
+    all_posts = r.subreddit_from_name(last_sr).get_hot.to_a
+  elsif sort == 'new'
+    all_posts = r.subreddit_from_name(last_sr).get_new.to_a
+  else #controvertial
+    all_posts = r.subreddit_from_name(last_sr).get_controvertial.to_a
+  end
+
+  all_posts = filter_posts(all_posts)
+
+  # return
+  all_posts[id.to_i]
 end
  
 command :r do |c|
@@ -69,10 +125,11 @@ command :r do |c|
         :subreddit => subreddit,
         :sortby => sort
     }
-    top.select! {|post| post.is_self}
-    unless $nsfw_ok
-      top.select! {|post| !post.over_18}
-    end
+
+
+
+    top = filter_posts(top)
+
     id = 0
     top.each do |post|
       enable_paging
@@ -82,8 +139,9 @@ command :r do |c|
       puts Paint[post.title, $orangered]
       puts ''
       post.selftext.split("\n").each do |line|
+        line.strip!
         line.gsub!('&gt;', '>')
-        puts "    #{line.justify(80)}"
+        puts line.justify(80, 4)
       end
       puts "\n[#{Paint["snoo comments #{id}", $periwinkle]} to read comments]"
       puts "\n--------\n"
@@ -100,7 +158,22 @@ command :u do |c|
   c.example 'description', 'command example'
   c.option '--some-switch', 'Some switch that does something'
   c.action do |args, options|
-    puts 'not yet implemented'
+    if args[0].nil?
+      u = ask('User: /u/ ')
+    else
+      u = args[0]
+    end
+
+    r = Marshal.load(File.read($session))
+
+    user = r.user_from_name(u)
+
+    puts "Viewing /u/#{u}"
+    puts "Link karma: #{user.link_karma}"
+    puts "Comment karma: #{user.comment_karma}"
+    puts "Redditor since: #{Time.at(user.created_utc.to_i)}"
+
+    puts user
   end
 end
 
@@ -124,27 +197,13 @@ command :up do |c|
       r.authorize!
 
       if type == :thread
-        cached = JSON.read($cache)
-        last_sr = cached['subreddit']
-        sort = cached['sortby']
-
-        if sort == 'top'
-          all_posts = r.subreddit_from_name(last_sr).get_top.to_a
-        elsif sort == 'hot'
-          all_posts = r.subreddit_from_name(last_sr).get_hot.to_a
-        elsif sort == 'new'
-          all_posts = r.subreddit_from_name(last_sr).get_new.to_a
-        else #controvertial
-          all_posts = r.subreddit_from_name(last_sr).get_controvertial.to_a
-        end
-
-        post = all_posts[id.to_i]
+        post = retrieve_thread_post(id, r)
 
         if post.nil?
           puts 'invalid id'
         else
           post.upvote
-          puts "Upvoted #{post.author}'s thread ''#{post.title[0..40]}...' in /r/#{post.subreddit}"
+          puts "Upvoted /u/#{post.author}'s thread ''#{post.title[0..40]}...' in /r/#{post.subreddit}"
           puts "[#{Paint["snoo unvote #{id}", $orangered ]} to clear vote]"
         end
       else
@@ -180,21 +239,7 @@ command :down do |c|
     begin
       r.authorize!
       if type == :thread
-        cached = JSON.read($cache)
-        last_sr = cached['subreddit']
-        sort = cached['sortby']
-
-        if sort == 'top'
-          all_posts = r.subreddit_from_name(last_sr).get_top.to_a
-        elsif sort == 'hot'
-          all_posts = r.subreddit_from_name(last_sr).get_hot.to_a
-        elsif sort == 'new'
-          all_posts = r.subreddit_from_name(last_sr).get_new.to_a
-        else #controvertial
-          all_posts = r.subreddit_from_name(last_sr).get_controvertial.to_a
-        end
-
-        post = all_posts[id.to_i]
+        post = retrieve_thread_post(id, r)
 
         if post.nil?
           puts 'invalid id'
@@ -238,21 +283,7 @@ command :unvote do |c|
       r.authorize!
 
       if type == :thread
-        cached = JSON.read($cache)
-        last_sr = cached['subreddit']
-        sort = cached['sortby']
-
-        if sort == 'top'
-          all_posts = r.subreddit_from_name(last_sr).get_top.to_a
-        elsif sort == 'hot'
-          all_posts = r.subreddit_from_name(last_sr).get_hot.to_a
-        elsif sort == 'new'
-          all_posts = r.subreddit_from_name(last_sr).get_new.to_a
-        else #controvertial
-          all_posts = r.subreddit_from_name(last_sr).get_controvertial.to_a
-        end
-
-        post = all_posts[id.to_i]
+        post = retrieve_thread_post(id, r)
 
         if post.nil?
           puts 'invalid id'
@@ -286,30 +317,19 @@ command :comments do |c|
     end
 
     r = Marshal.load(File.read($session))
-    r.authorize!
 
-    cached = JSON.parse(File.read($cache))
-    last_sr = cached['subreddit']
-    sort = cached['sortby']
+    begin
+      post = retrieve_thread_post(id, r)
 
-    if sort == 'top'
-      all_posts = r.subreddit_from_name(last_sr).get_top.to_a
-    elsif sort == 'hot'
-      all_posts = r.subreddit_from_name(last_sr).get_hot.to_a
-    elsif sort == 'new'
-      all_posts = r.subreddit_from_name(last_sr).get_new.to_a
-    else #controvertial
-      all_posts = r.subreddit_from_name(last_sr).get_controvertial.to_a
-    end
-
-
-    post = all_posts[id.to_i]
-
-    if post.nil?
-      puts 'invalid id'
-    else
-      enable_paging
-      puts display_children(post.comments, post.author)
+      if post.nil?
+        puts 'invalid id'
+      else
+        enable_paging
+        puts Paint["Comments on /u/#{post.author}'s thread #{post.title} in /r/#{post.subreddit}:", :underline]
+        puts display_children(post.comments, post.author)
+      end
+    rescue Redd::Error::ExpiredCode
+      puts "Your password is incorrect. #{Paint['snoo login', $periwinkle ]} to login, then vote again."
     end
   end
 end
@@ -321,7 +341,14 @@ command :open do |c|
   c.example 'description', 'command example'
   c.option '--some-switch', 'Some switch that does something'
   c.action do |args, options|
-    puts 'not yet implemented'
+    if args[0].nil?
+      id = ask('Which thread?')
+    else
+      id = args[0]
+    end
+    r = Marshal.load(File.read($session))
+    r.authorize!
+
   end
 end
 
@@ -334,11 +361,11 @@ command :comment do |c|
   c.action do |args, options|
     if args[0].nil?
       id = ask('Which thread or comment?')
-      comment_text = ask('Comment: ')
+      comment_text = ask('Comment:')
     else
       id = args[0]
       if args[1].nil?
-        comment_text = ask('Comment: ')
+        comment_text = ask('Comment:')
       else
         comment_text = args[1]
       end
@@ -352,7 +379,7 @@ command :comment do |c|
       r.authorize!
 
       if type == :thread
-        cached = JSON.read($cache)
+        cached = JSON.parse(File.read($cache))
         last_sr = cached['subreddit']
         sort = cached['sortby']
 
@@ -364,6 +391,10 @@ command :comment do |c|
           all_posts = r.subreddit_from_name(last_sr).get_new.to_a
         else #controvertial
           all_posts = r.subreddit_from_name(last_sr).get_controvertial.to_a
+        end
+        all_posts.select! {|post| post.is_self}
+        unless $nsfw_ok
+          all_posts.select! {|post| !post.over_18}
         end
 
         post = all_posts[id.to_i]
@@ -383,8 +414,7 @@ command :comment do |c|
         puts "Said: #{comment_text.justify(80)}"
       end
     rescue Redd::Error::ExpiredCode
-      puts "Your password is incorrect. #{Paint['snoo login', $periwinkle ]} to login, then vote again."
-      break
+      puts "Your password is incorrect. #{Paint['snoo login', $periwinkle ]} to login, then comment again."
     end
   end
 end
@@ -422,6 +452,8 @@ command :logout do |c|
   c.option '--some-switch', 'Some switch that does something'
   c.action do |args, options|
     File.delete($session)
+    r = Redd.it(:script, $key, $secret, '', '', :user_agent => 'Reddit Command Line Browser v.0.1')
+    File.write($session, Marshal.dump(r))
     puts 'Logged out.'
   end
 end

@@ -1,4 +1,12 @@
+GIT
+  remote: git://github.com/caramcc/justify.git
+  revision: e23be92b16a54a98fca587a5d706dca73f63e577
+  branch: indent-on-new-line
+  specs:
+    justify (1.0.2)
+
 GEM
+  remote: https://rubygems.org/
   specs:
     addressable (2.3.7)
     commander (4.1.5)
@@ -9,7 +17,6 @@ GEM
       addressable (~> 2.3, >= 2.3.5)
     hashie (3.4.0)
     highline (1.6.21)
-    justify (1.0.2)
     multi_json (1.10.1)
     multipart-post (2.0.0)
     paint (1.0.0)
@@ -24,6 +31,6 @@ PLATFORMS
 
 DEPENDENCIES
   commander
-  justify
+  justify!
   paint
   redd (~> 0.7.0)
