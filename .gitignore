@@ -1,4 +1,5 @@
 .ruby-version
 
 .idea/*
-
+/bin/Snoosesh
+/bin/snoostore.json
