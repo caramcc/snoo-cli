@@ -8,6 +8,7 @@ $periwinkle='#9494FF'
 $linelength=80
 
 $cache = 'snoostore.json'
+$config = 'snooconf.json'
 $session = 'Snoosesh'
 
 $valid_sorts = %w(hot top controversial new)
